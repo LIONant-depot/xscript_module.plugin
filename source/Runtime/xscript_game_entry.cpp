@@ -15,6 +15,14 @@ void XecsPlugin_RegisterComponents( xecs::game_mgr::instance& GameMgr, xecs::plu
 extern "C" __declspec(dllexport)
 void XecsPlugin_RegisterSystems( xecs::game_mgr::instance& GameMgr ) noexcept
 {
+    // This DLL's own copies of the engine's built-in components (entity, parent, ...) get their numbers first: every system that
+    // takes a 'const entity&' in its Foreach reads them. Then the components of other binaries that the module's systems
+    // query (XSCRIPT_USES_COMPONENT).
+    GameMgr.m_ComponentMgr.LockComponentTypes();
+    xecs::component::mgr::SyncLocalBitIDs<>();
+    for (auto* p = xscript::self_registration<xscript::use_entry>::s_pHead; p; p = p->m_pNext)
+        p->m_Value.m_pSyncFn();
+
     for (auto* p = xscript::self_registration<xscript::system_entry>::s_pHead; p; p = p->m_pNext)
         p->m_Value.m_pRegisterFn(GameMgr);
 }

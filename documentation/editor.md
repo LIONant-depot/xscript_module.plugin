@@ -21,7 +21,7 @@ What the generated project compiles in, and what module authors include:
 
 | File | What it is |
 |---|---|
-| `xscript_registration.h` | `XSCRIPT_REGISTER_COMPONENT(type, category, priority)` and `XSCRIPT_REGISTER_SYSTEM(type)`: a module announces its components and systems through a self-registering list, so it is registered just by being compiled into the DLL |
+| `xscript_registration.h` | `XSCRIPT_REGISTER_COMPONENT(type, category, priority)` and `XSCRIPT_REGISTER_SYSTEM(type)`: a module announces its components and systems through a self-registering list, so it is registered just by being compiled into the DLL. `XSCRIPT_USES_COMPONENT(type)` declares a component of another binary (the engine's `xlioncore::transform`) that the module's systems query: component type information is per binary, so the entry syncs this DLL's copy before the systems are registered (forget it and the first system that queries the type crashes the editor); the entry also syncs the engine's built-in components (`entity`, ...) for every module. To use the TYPES of an engine component that registers itself (the physics ones), include its header between `#define XSCRIPT_IMPORT_ONLY` and `#undef XSCRIPT_IMPORT_ONLY`: the module gets the type and its reflection but does not register it a second time, then name each one with `XSCRIPT_USES_COMPONENT` |
 | `xscript_game_entry.cpp` | the DLL's entry points (`XecsPlugin_RegisterComponents`, `XecsPlugin_RegisterSystems`, `XecsPlugin_Unregister`) and `XScript_GetComponentDisplayInfo`, which hands the editor each component's guid, name, category and priority |
 
 A module includes `plugins/xscript_module.plugin/source/Runtime/xscript_registration.h`. The DLL links the xECSV2 import

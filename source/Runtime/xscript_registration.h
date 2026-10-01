@@ -35,6 +35,14 @@ namespace xscript
         void (*m_pRegisterFn)(xecs::game_mgr::instance&) = nullptr;
     };
 
+    // A component that ANOTHER binary registered (the engine's Transform, say) and this module queries. Component type information is
+    // kept per binary, so before the module's systems are registered this DLL's own copy of such a type needs the number the registry gave it
+    // (SyncLocalBitIDs). Without it the first system that queries the type reads garbage and takes the whole editor down.
+    struct use_entry
+    {
+        void (*m_pSyncFn)() = nullptr;
+    };
+
     template<typename T>
     struct self_registration
     {
@@ -56,6 +64,16 @@ namespace xscript
 
 // One per component struct, where XPROPERTY_REG would otherwise go: it does both. CATEGORY and PRIORITY are required (a
 // preprocessor macro cannot default an argument): a group name such as "Rendering" and an int that sorts ascending within it.
+//
+// A module that wants the TYPES of an engine component (the physics ones, say) includes the engine's header between
+//     #define XSCRIPT_IMPORT_ONLY
+//     #include "dependencies/xLIONCore/src/physics/xlioncore_physics.h"
+//     #undef  XSCRIPT_IMPORT_ONLY
+// and then names each one it uses with XSCRIPT_USES_COMPONENT. The component stays registered once, by the binary that owns it; the
+// module only gets its own reflection (XPROPERTY_REG) and its own copy of the type's information.
+#ifdef XSCRIPT_IMPORT_ONLY
+    #define XSCRIPT_REGISTER_COMPONENT(TYPE, CATEGORY, PRIORITY) XPROPERTY_REG(TYPE)
+#else
 #define XSCRIPT_REGISTER_COMPONENT(TYPE, CATEGORY, PRIORITY) \
     XPROPERTY_REG(TYPE) \
     inline xscript::self_registration<xscript::component_entry> g_AutoReg_##TYPE \
@@ -65,6 +83,16 @@ namespace xscript
         , xecs::component::type::info_v<TYPE>.m_Guid.m_Value \
         } \
     };
+#endif
+
+// A module that queries a component it does not define itself (anything of the engine: xlioncore::transform, ...) says so once, anywhere in
+// the module:   XSCRIPT_USES_COMPONENT(xlioncore::transform)
+// The game DLL's entry syncs each of them before it registers the module's systems.
+#define XSCRIPT_PASTE_(A, B) A##B
+#define XSCRIPT_PASTE(A, B)  XSCRIPT_PASTE_(A, B)
+#define XSCRIPT_USES_COMPONENT(TYPE) \
+    inline xscript::self_registration<xscript::use_entry> XSCRIPT_PASTE(g_AutoUse_, __COUNTER__) \
+    { xscript::use_entry{ []() noexcept { xecs::component::mgr::SyncLocalBitIDs<TYPE>(); } } };
 
 // Systems are never XPROPERTY_REG'd, so this only does the self-registration half.
 #define XSCRIPT_REGISTER_SYSTEM(TYPE) \
