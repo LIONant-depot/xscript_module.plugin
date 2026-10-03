@@ -28,11 +28,17 @@ namespace xscript
         // is loaded, before XecsPlugin_RegisterComponents runs. It lets a candidate DLL's manifest be compared with a scene's
         // component dependencies by stable identity instead of by display name.
         std::uint64_t m_Guid      = 0;
+        // The file the component is DEFINED in (__FILE__ where XSCRIPT_REGISTER_COMPONENT stands, so it is the header that holds the struct no matter which
+        // module includes it). The editor finds the module from it: the path runs through <...>/ScriptModule/xx/yy/<guid>.desc/source_db/ (xscript_module_paths.h).
+        const char*   m_pFile     = "";
     };
 
     struct system_entry
     {
         void (*m_pRegisterFn)(xecs::game_mgr::instance&) = nullptr;
+        std::uint64_t m_Guid      = 0;
+        const char*   m_pName     = "";
+        const char*   m_pFile     = "";                 // where the system is defined, like component_entry::m_pFile
     };
 
     // A component that ANOTHER binary registered (the engine's Transform, say) and this module queries. Component type information is
@@ -60,6 +66,13 @@ namespace xscript
     inline constexpr const char* kGetComponentDisplayInfoName = "XScript_GetComponentDisplayInfo";
     using pfn_component_display_visitor  = void(__cdecl*)(void* pUserData, std::uint64_t Guid, const char* pName, const char* pCategory, int Priority);
     using pfn_get_component_display_info = void(__cdecl*)(pfn_component_display_visitor pVisitor, void* pUserData);
+
+    // Which file each component and system of the DLL is defined in: the editor maps them to script modules (a component to the module that holds its header). A second export,
+    // not a changed one: the editor may load a DLL built before this existed and must not call it through another signature. Optional: a DLL without it just has no mapping.
+    // Kind: 0 = component, 1 = system.
+    inline constexpr const char* kGetRegistrationsName = "XScript_GetRegistrations";
+    using pfn_registration_visitor = void(__cdecl*)(void* pUserData, int Kind, std::uint64_t Guid, const char* pName, const char* pFile);
+    using pfn_get_registrations    = void(__cdecl*)(pfn_registration_visitor pVisitor, void* pUserData);
 }
 
 // One per component struct, where XPROPERTY_REG would otherwise go: it does both. CATEGORY and PRIORITY are required (a
@@ -81,6 +94,7 @@ namespace xscript
         { [](xecs::game_mgr::instance& GameMgr, xecs::plugin::token Token) noexcept { GameMgr.RegisterComponents<TYPE>(Token); } \
         , TYPE::typedef_v.m_pName, CATEGORY, PRIORITY \
         , xecs::component::type::info_v<TYPE>.m_Guid.m_Value \
+        , __FILE__ \
         } \
     };
 #endif
@@ -98,7 +112,9 @@ namespace xscript
 #define XSCRIPT_REGISTER_SYSTEM(TYPE) \
     inline xscript::self_registration<xscript::system_entry> g_AutoReg_##TYPE \
     { xscript::system_entry \
-        { [](xecs::game_mgr::instance& GameMgr) noexcept { GameMgr.RegisterSystems<TYPE>(); } } \
+        { [](xecs::game_mgr::instance& GameMgr) noexcept { GameMgr.RegisterSystems<TYPE>(); } \
+        , xecs::system::type::info_v<TYPE>.m_Guid.m_Value, xecs::system::type::info_v<TYPE>.m_pName, __FILE__ \
+        } \
     };
 
 #endif // XSCRIPT_REGISTRATION_H

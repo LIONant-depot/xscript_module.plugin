@@ -34,6 +34,15 @@ void XecsPlugin_Unregister( xecs::plugin::token /*Token*/ ) noexcept
 }
 
 extern "C" __declspec(dllexport)
+void XScript_GetRegistrations( xscript::pfn_registration_visitor pVisitor, void* pUserData ) noexcept
+{
+    for (auto* p = xscript::self_registration<xscript::component_entry>::s_pHead; p; p = p->m_pNext)
+        pVisitor(pUserData, 0, p->m_Value.m_Guid, p->m_Value.m_pName, p->m_Value.m_pFile);
+    for (auto* p = xscript::self_registration<xscript::system_entry>::s_pHead; p; p = p->m_pNext)
+        pVisitor(pUserData, 1, p->m_Value.m_Guid, p->m_Value.m_pName, p->m_Value.m_pFile);
+}
+
+extern "C" __declspec(dllexport)
 void XScript_GetComponentDisplayInfo( xscript::pfn_component_display_visitor pVisitor, void* pUserData ) noexcept
 {
     for (auto* p = xscript::self_registration<xscript::component_entry>::s_pHead; p; p = p->m_pNext)

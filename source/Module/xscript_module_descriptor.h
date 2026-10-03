@@ -14,7 +14,8 @@
 // (see xscript_module_files.h, LoadOrMigrate): nothing about an existing module breaks.
 //
 // No UI and no editor in here: the generator of the game project, the module editor and the pipe commands all include this one header.
-#include "dependencies/xECSV2/src/xecs.h"
+#include "dependencies/xresource_pipeline_v2/source/xresource_pipeline.h"
+#include "dependencies/xproperty/source/xcore/my_properties.h"
 #include "plugins/xscript_module.plugin/source/Module/xscript_module_paths.h"
 
 #include <format>
@@ -24,6 +25,7 @@
 namespace xscript::module
 {
     inline constexpr auto type_guid_v = xresource::type_guid(0x8D3968CB1287FA04ull);      // "ScriptModule": must match the TypeGUID of the plugin's resource_pipeline.config.txt
+    using module_ref = xresource::def_guid<type_guid_v>;                                   // a reference to a script module (what the Game resource lists)
 
     // One file of the module. Path is relative to source_db, with forward slashes ("Systems/ball_system.h").
     struct file
@@ -73,7 +75,7 @@ namespace xscript::module
 
         XPROPERTY_VDEF
         ( "ScriptModule", descriptor
-        , obj_member<"Files",     &descriptor::m_Files>
+        , obj_member<"Files",     &descriptor::m_Files, member_flags<flags::DONT_SHOW>>      // the tree of the module editor manages the files
         , obj_member<"Libraries", &descriptor::m_Libraries>
         , obj_member<"Defines",   &descriptor::m_Defines>
         )

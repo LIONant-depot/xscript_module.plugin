@@ -8,7 +8,9 @@
 #include <algorithm>
 #include <cctype>
 #include <string>
+#include <cstdint>
 #include <string_view>
+#include <vector>
 
 namespace xscript::module
 {
@@ -60,6 +62,42 @@ namespace xscript::module
             At = Slash + 1;
         }
         return Out;
+    }
+
+    // The module a source file belongs to, from its path: the guid of the last "ScriptModule/<xx>/<yy>/<guid>.desc/source_db/" in it (0 when there is none). The compiler gives the
+    // game's files to the compiler by absolute path, and an #include of another module's header keeps it, so a file's path says which module it is part of. "..", "." and backslashes are
+    // folded first (a header included from another module's folder arrives as ".../a/source_db/../../b.desc/source_db/x.h"). xx and yy are the low bytes of the guid, the way
+    // the resource pipeline names the folders; a path whose folders do not match its guid is not a module's.
+    inline std::uint64_t ModuleGuidFromSourcePath(std::string_view File) noexcept
+    {
+        std::vector<std::string> Parts;
+        std::size_t At = 0;
+        while (At <= File.size())
+        {
+            auto Cut = File.find_first_of("/\\", At);
+            const std::string Part(File.substr(At, Cut == std::string_view::npos ? std::string_view::npos : Cut - At));
+            if (Part == "..") { if (!Parts.empty()) Parts.pop_back(); }
+            else if (!Part.empty() && Part != ".") Parts.push_back(Part);
+            if (Cut == std::string_view::npos) break;
+            At = Cut + 1;
+        }
+        auto IsHex = [](const std::string& Text, std::size_t Min, std::size_t Max)
+        {
+            return Text.size() >= Min && Text.size() <= Max && std::all_of(Text.begin(), Text.end(), [](unsigned char c) { return std::isxdigit(c) != 0; });
+        };
+        for (std::size_t i = Parts.size(); i-- > 0; )
+        {
+            // ... ScriptModule / xx / yy / <guid>.desc / source_db / ...
+            if (Lower(Parts[i]) != "scriptmodule" || i + 4 >= Parts.size()) continue;
+            const std::string& Low = Parts[i + 1]; const std::string& High = Parts[i + 2]; const std::string& Desc = Parts[i + 3];
+            if (Lower(Parts[i + 4]) != "source_db" || Desc.size() < 6 || Lower(Desc.substr(Desc.size() - 5)) != ".desc") continue;
+            const std::string Guid = Desc.substr(0, Desc.size() - 5);
+            if (!IsHex(Low, 2, 2) || !IsHex(High, 2, 2) || !IsHex(Guid, 1, 16)) continue;
+            const std::uint64_t Value = std::stoull(Guid, nullptr, 16);
+            if (Value == 0 || std::stoul(Low, nullptr, 16) != (Value & 0xFF) || std::stoul(High, nullptr, 16) != ((Value >> 8) & 0xFF)) continue;
+            return Value;
+        }
+        return 0;
     }
 
     // Case-insensitive equality of two normalized paths (Windows file names are).

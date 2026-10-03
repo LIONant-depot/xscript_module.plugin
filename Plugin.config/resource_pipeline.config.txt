@@ -10,6 +10,6 @@
   "PipelinePlugin/IconPaths[]"                      ;s64    1
   "PipelinePlugin/IconPaths[G:0]"                      ;wstring "icon.png"
   "PipelinePlugin/Details/RunAfter[]"        ;s64    0
-  "PipelinePlugin/Details/CompilationScript" ;wstring ""
-  "PipelinePlugin/Details/DebugCompiler"     ;wstring ""
-  "PipelinePlugin/Details/ReleaseCompiler"   ;wstring ""
+  "PipelinePlugin/Details/CompilationScript" ;wstring "Cache\\Plugins\\xscript_module.plugin\\Build\\CreateAndBuildProject.bat"
+  "PipelinePlugin/Details/DebugCompiler"     ;wstring "Cache\\Plugins\\xscript_module.plugin\\Build\\xscript_module_compiler.vs2022\\Debug\\xscript_module_compiler.exe"
+  "PipelinePlugin/Details/ReleaseCompiler"   ;wstring "Cache\\Plugins\\xscript_module.plugin\\Build\\xscript_module_compiler.vs2022\\Release\\xscript_module_compiler.exe"

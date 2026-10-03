@@ -10,12 +10,27 @@
 #include "plugins/xscript_module.plugin/source/Module/xscript_module_descriptor.h"
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <thread>
 
 namespace xscript::module
 {
+    // The resource pipeline watches Descriptor.txt and opens it for a moment, exclusively, to see that it can be read: a write that lands in that moment is refused (a sharing
+    // violation) and works a few milliseconds later. Fn returns true when it worked.
+    template<typename T_FN>
+    inline bool Retry(T_FN&& Fn) noexcept
+    {
+        for (int Try = 0; Try < 40; ++Try)
+        {
+            if (Fn()) return true;
+            std::this_thread::sleep_for(std::chrono::milliseconds(25));
+        }
+        return false;
+    }
+
     inline std::filesystem::path DescriptorFile(const std::filesystem::path& DescFolder) noexcept { return DescFolder / L"Descriptor.txt"; }
     inline std::filesystem::path SourceDb(const std::filesystem::path& DescFolder) noexcept       { return DescFolder / L"source_db"; }
 
@@ -55,8 +70,14 @@ namespace xscript::module
         const auto File = DescriptorFile(DescFolder);
         if (!std::filesystem::exists(File, Ec)) { if (pError) *pError = "no Descriptor.txt"; return false; }
         descriptor Fresh;
-        xproperty::settings::context Context;
-        if (auto Err = Fresh.Serialize(true, File.wstring(), Context); Err) { if (pError) *pError = std::string(Err.getMessage()); return false; }
+        std::string Why;
+        const bool bRead = Retry([&]
+        {
+            xproperty::settings::context Context;
+            if (auto Err = Fresh.Serialize(true, File.wstring(), Context); Err) { Why = std::string(Err.getMessage()); return false; }
+            return true;
+        });
+        if (!bRead) { if (pError) *pError = Why; return false; }
         Normalize(Fresh);
         Out = std::move(Fresh);
         return true;
@@ -67,9 +88,15 @@ namespace xscript::module
         std::error_code Ec;
         std::filesystem::create_directories(DescFolder, Ec);
         Normalize(D);
-        xproperty::settings::context Context;
-        if (auto Err = D.Serialize(false, DescriptorFile(DescFolder).wstring(), Context); Err) { if (pError) *pError = std::string(Err.getMessage()); return false; }
-        return true;
+        std::string Why;
+        const bool bWritten = Retry([&]
+        {
+            xproperty::settings::context Context;
+            if (auto Err = D.Serialize(false, DescriptorFile(DescFolder).wstring(), Context); Err) { Why = std::string(Err.getMessage()); return false; }
+            return true;
+        });
+        if (!bWritten && pError) *pError = Why;
+        return bWritten;
     }
 
     // What the module was before it had a descriptor: every C++ file of its folder.
@@ -100,6 +127,16 @@ namespace xscript::module
         return L;
     }
 
+    // The time a compile of the pipeline stamps its output with. The pipeline recompiles a resource when its descriptor is newer than its output, so the output has to
+    // carry the time the compile STARTED reading its inputs, not the time it ended: an edit made while the compile runs is then newer than the output and is compiled
+    // after it, instead of being lost. A compile that finds nothing to change must stamp too (a rewrite of the same text would otherwise leave an output older than
+    // the descriptor, and the pipeline would compile the module again at every start).
+    inline void StampCompileOutput(const std::filesystem::path& File, std::filesystem::file_time_type StartOfCompile) noexcept
+    {
+        std::error_code Ec;
+        std::filesystem::last_write_time(File, StartOfCompile, Ec);
+    }
+
     // The module as the generator builds it.
     struct resolved
     {
@@ -112,12 +149,11 @@ namespace xscript::module
         std::vector<std::string>                m_Missing;          // listed, not excluded, and not on disk
         std::vector<std::string>                m_Unlisted;         // on disk in source_db, not in the descriptor: not built
     };
-    inline resolved Resolve(const std::filesystem::path& DescFolder, bool bWriteMigration) noexcept
+    // The files of a descriptor that is already in memory (the editor's own, with edits that are not saved yet), found in the module's folder.
+    inline resolved ResolveDescriptor(const descriptor& D, const std::filesystem::path& DescFolder) noexcept
     {
         resolved R;
-        auto L = LoadOrMigrate(DescFolder, bWriteMigration);
-        R.m_Descriptor = std::move(L.m_Descriptor); R.m_bMigrated = L.m_bMigrated; R.m_Error = std::move(L.m_Error);
-        if (!R.m_Error.empty()) return R;
+        R.m_Descriptor = D;
         std::error_code Ec;
         for (const auto& F : R.m_Descriptor.m_Files)
         {
@@ -135,6 +171,15 @@ namespace xscript::module
             const bool bListed = std::any_of(R.m_Descriptor.m_Files.begin(), R.m_Descriptor.m_Files.end(), [&](const file& F) { return SamePath(F.m_Path, Path); });
             if (!bListed) R.m_Unlisted.push_back(Path);
         }
+        return R;
+    }
+    // The module as the generator builds it: its descriptor from disk (written from the folder first, when asked and there is none), and its files.
+    inline resolved Resolve(const std::filesystem::path& DescFolder, bool bWriteMigration) noexcept
+    {
+        auto L = LoadOrMigrate(DescFolder, bWriteMigration);
+        if (!L.m_Error.empty()) { resolved R; R.m_Error = std::move(L.m_Error); return R; }
+        resolved R = ResolveDescriptor(L.m_Descriptor, DescFolder);
+        R.m_bMigrated = L.m_bMigrated;
         return R;
     }
 
@@ -197,10 +242,13 @@ namespace xscript::module
     {
         std::error_code Ec;
         std::filesystem::create_directories(Path.parent_path(), Ec);
-        std::ofstream Out(Path, std::ios::binary | std::ios::trunc);
-        if (!Out) return false;
-        Out.write(Bytes.data(), static_cast<std::streamsize>(Bytes.size()));
-        return Out.good();
+        return Retry([&]
+        {
+            std::ofstream Out(Path, std::ios::binary | std::ios::trunc);
+            if (!Out) return false;
+            Out.write(Bytes.data(), static_cast<std::streamsize>(Bytes.size()));
+            return Out.good();
+        });
     }
 
     // What a new file starts with: a header gets #pragma once, a source file includes its own header when there is one.
