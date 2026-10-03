@@ -58,7 +58,7 @@ namespace xscript::module_editor
         tree_node                                   m_Tree;
         bool                                        m_bRebuild = true;
         double                                      m_NextCheck = 0.0, m_NextScan = 0.0;
-        bool                                        m_bInGame = false;          // the project's Game resource lists this module (read every half second, not every frame)
+        std::vector<std::string>                    m_UsedBy;                   // the Games of the project that list this module (read every half second, not every frame)
         std::filesystem::file_time_type             m_DescriptorStamp{};
 
         // ---- the viewers
@@ -321,8 +321,7 @@ namespace xscript::module_editor
             if (Now < m_NextCheck) return;
             m_NextCheck = Now + 0.5;
             {
-                const auto Modules = xlevel::ProjectModules();
-                m_bInGame = std::find(Modules.begin(), Modules.end(), module_ref{ m_Document.m_Guid.m_Instance }) != Modules.end();
+                m_UsedBy = xlevel::GamesListingModule(m_Document.m_Guid.m_Instance.m_Value);
             }
             std::error_code Ec;
             const auto Stamp = std::filesystem::last_write_time(DescriptorFile(m_Folder), Ec);
@@ -746,8 +745,14 @@ namespace xscript::module_editor
             ImGui::TextUnformatted(m_Tree.m_Name.c_str());
             ImGui::TextDisabled("A script module: %zu source file%s, %zu header%s, %zu librar%s.", nSources, nSources == 1 ? "" : "s", nHeaders, nHeaders == 1 ? "" : "s", D.m_Libraries.size(), D.m_Libraries.size() == 1 ? "y" : "ies");
             ImGui::Spacing();
-            if (m_bInGame) ImGui::TextUnformatted("Part of the game: the project's Game resource lists this module, and the game project is made from its descriptor.");
-            else ImGui::TextColored(ImVec4(0.85f, 0.75f, 0.45f, 1.0f), "Not part of the game yet: add it to the Game resource (or run AddProjectModuleReference) for it to be built.");
+            if (!m_UsedBy.empty())
+            {
+                std::string Games;
+                for (const auto& Name : m_UsedBy) Games += (Games.empty() ? "" : ", ") + Name;
+                ImGui::Text("Part of: %s", Games.c_str());
+                if (ImGui::IsItemHovered()) xeditor::hint::Draw({ .m_Topic = "Games", .m_Body = "The Games of the project whose script modules include this one. Each Game's project is made from the descriptors of its modules." });
+            }
+            else ImGui::TextColored(ImVec4(0.85f, 0.75f, 0.45f, 1.0f), "Not part of any Game yet: add it to a Game resource (or run AddProjectModuleReference) for it to be built.");
             if (nExcluded) ImGui::TextDisabled("%zu file%s kept out of the build.", nExcluded, nExcluded == 1 ? " is" : "s are");
             ImGui::Separator();
             if (nMissing)
