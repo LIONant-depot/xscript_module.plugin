@@ -21,6 +21,7 @@ namespace xscript::module_editor
         virtual void                            Commit()             noexcept = 0;     // the descriptor changed: save it, regenerate the game project, refresh the tree
         virtual std::string                     OpenFile(const std::string& Path, int Line) noexcept = 0;     // "" or why not
         virtual bool                            CloseFile(const std::string& Path) noexcept = 0;
+        virtual std::string                     ZoomFile(const std::string& Path, float Notches, float Size) noexcept = 0;     // "" or why not; Size > 0 sets the text's size, else Notches change it (what the wheel does)
         virtual void                            RenameView(const std::string& From, const std::string& To) noexcept = 0;
         virtual std::string                     ListFiles()          noexcept = 0;
         virtual std::string                     ListOpen()           noexcept = 0;
@@ -312,6 +313,25 @@ namespace xscript::module_editor
                 return Err.empty() ? "OpenFile: " + xscript::module::NormalizeRelative(Text(m_hPath)) + " is open" : "OpenFile: " + Err;
             }
             xcmdline::parser::handle m_hPath, m_hLine;
+        };
+        struct zoom_file : base_query
+        {
+            zoom_file(xundo::system& S, module_api& A) noexcept : base_query(S, A, "ZoomFile") { RegisterArguments(); }
+            const char* getCommandHelp() const noexcept override { return "Zooms the text of a file's viewer, as Ctrl + the mouse wheel does (the size is in ListOpenFiles). Usage: ZoomFile -Path \"Foo.h\" [-By notches (+ bigger, one pixel each)] [-Size pixels (0 = the default size)]"; }
+            void RegisterArguments() noexcept override
+            {
+                m_hPath = m_Parser.addOption("Path", "Path inside source_db", true, 1);
+                m_hBy   = m_Parser.addOption("By", "Wheel notches: positive is bigger", false, 1);
+                m_hSize = m_Parser.addOption("Size", "The text's size in pixels; 0 is the default size", false, 1);
+            }
+            std::string Query() noexcept override
+            {
+                const auto By = Text(m_hBy), Size = Text(m_hSize);
+                if (By.empty() && Size.empty()) return "ZoomFile: say -By (notches) or -Size (pixels)";
+                const auto Err = m_Api.ZoomFile(Text(m_hPath), By.empty() ? 0.0f : static_cast<float>(std::atof(By.c_str())), Size.empty() ? -1.0f : static_cast<float>(std::atof(Size.c_str())));
+                return Err.empty() ? "ZoomFile: ok" : "ZoomFile: " + Err;
+            }
+            xcmdline::parser::handle m_hPath, m_hBy, m_hSize;
         };
         struct close_file : base_query
         {

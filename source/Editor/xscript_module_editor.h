@@ -96,6 +96,7 @@ namespace xscript::module_editor
         cmd::list_files     m_ListFiles;
         cmd::open_file      m_OpenFile;
         cmd::close_file     m_CloseFile;
+        cmd::zoom_file      m_ZoomFile;
         cmd::list_open      m_ListOpen;
         cmd::list_tree      m_ListTree;
         cmd::export_cmake   m_ExportCMake;
@@ -108,7 +109,7 @@ namespace xscript::module_editor
         session(xresource::full_guid Guid, xresource_editor::library::guid LibraryGuid, xgpu::device* pDevice) noexcept
             : descriptor_editor("ScriptModule", Guid, LibraryGuid, pDevice)
             , m_AddFile(m_Undo, *this), m_RemoveFile(m_Undo, *this), m_RenameFile(m_Undo, *this), m_NewFolder(m_Undo, *this), m_RenameFolder(m_Undo, *this), m_RemoveFolder(m_Undo, *this)
-            , m_ExcludeFile(m_Undo, *this), m_Rescan(m_Undo, *this), m_ListFiles(m_Undo, *this), m_OpenFile(m_Undo, *this), m_CloseFile(m_Undo, *this), m_ListOpen(m_Undo, *this), m_ListTree(m_Undo, *this), m_SelectNode(m_Undo, *this), m_ExportCMake(m_Undo, *this)
+            , m_ExcludeFile(m_Undo, *this), m_Rescan(m_Undo, *this), m_ListFiles(m_Undo, *this), m_OpenFile(m_Undo, *this), m_CloseFile(m_Undo, *this), m_ZoomFile(m_Undo, *this), m_ListOpen(m_Undo, *this), m_ListTree(m_Undo, *this), m_SelectNode(m_Undo, *this), m_ExportCMake(m_Undo, *this)
         {
             m_Folder = std::filesystem::path(m_Document.m_DescriptorPath).parent_path();
             if (!m_Folder.empty() && !std::filesystem::exists(DescriptorFile(m_Folder)))          // a module from before the descriptors: written from its folder (the generator does the same)
@@ -175,6 +176,13 @@ namespace xscript::module_editor
             m_Views.push_back(std::make_unique<cpp_view>(Path, Absolute(m_Folder, Path), m_IdSuffix));
             m_Views.back()->GoTo(Line);
             return {};
+        }
+        std::string ZoomFile(const std::string& PathIn, float Notches, float Size) noexcept override
+        {
+            const std::string Path = NormalizeRelative(PathIn);
+            for (auto& V : m_Views)
+                if (SamePath(V->m_Path, Path)) { if (Size >= 0.0f) V->SetFontSize(Size); else V->ZoomBy(Notches); return {}; }
+            return std::format("'{}' is not open", PathIn);
         }
         bool CloseFile(const std::string& PathIn) noexcept override
         {
@@ -356,8 +364,8 @@ namespace xscript::module_editor
         }
         std::string ListOpen() noexcept override
         {
-            std::string Out = std::format("ListOpenFiles: ok\nOpen={}  Front={}\n\nPath\tFront\tProblems\n", m_Views.size(), m_Front.empty() ? "none" : m_Front);
-            for (const auto& V : m_Views) Out += std::format("{}\t{}\t{}\n", V->m_Path, SamePath(V->m_Path, m_Front), V->m_Problems);
+            std::string Out = std::format("ListOpenFiles: ok\nOpen={}  Front={}\n\nPath\tFront\tProblems\tFontSize\tX\tY\n", m_Views.size(), m_Front.empty() ? "none" : m_Front);
+            for (const auto& V : m_Views) Out += std::format("{}\t{}\t{}\t{:.0f}\t{:.0f}\t{:.0f}\n", V->m_Path, SamePath(V->m_Path, m_Front), V->m_Problems, V->m_FontSize, V->m_X, V->m_Y);
             return Out;
         }
 

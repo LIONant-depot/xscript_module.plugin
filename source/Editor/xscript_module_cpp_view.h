@@ -7,11 +7,13 @@
 //   - watches its file and shows the new text when the file changes on disk (Visual Studio saved it),
 //   - marks the lines the compiler complained about (the problems of the Logs whose site is this file), the message being the line's tooltip,
 //   - jumps to a line when asked (the Logs' "Open source", F8, the OpenFile command),
-//   - offers "Open in Visual Studio" (the file opens with the system's handler for it).
+//   - offers "Open in Visual Studio" (the file opens with the system's handler for it),
+//   - zooms its text with Ctrl + the mouse wheel over the code (or the ZoomFile command): each file's viewer keeps its own size.
 #include "source/Tools/Editor/xeditor_text_widget.h"
 #include "dependencies/xeditor/include/xeditor/open_ref.h"
 #include "dependencies/xlog/source/xlog_hub.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -39,6 +41,11 @@ namespace xscript::module_editor
         int                                 m_GoToLine = 0;         // 1-based, 0 = none
         std::uint64_t                       m_MarkersRevision = ~0ull;
         std::size_t                         m_Problems = 0;
+        float                               m_X = 0.0f, m_Y = 0.0f; // where the code is on the screen (its middle), as of the last frame it was drawn: where a mouse would go
+        float                               m_FontSize = 0.0f;      // the text's size in pixels; 0 until the first frame says what the default one is
+
+        static constexpr float              min_font_size_v = 6.0f;
+        static constexpr float              max_font_size_v = 64.0f;
 
         cpp_view(std::string Path, std::filesystem::path Absolute, const std::string& IdSuffix) noexcept
             : m_Path(std::move(Path)), m_Absolute(std::move(Absolute))
@@ -92,6 +99,10 @@ namespace xscript::module_editor
 
         void GoTo(int Line) noexcept { m_GoToLine = Line; m_bFocus = true; }
 
+        // The text's size: what the wheel does (one pixel for each notch, up is bigger) and what ZoomFile does. 0 is the default size.
+        void SetFontSize(float Size) noexcept { m_FontSize = Size <= 0.0f ? ImGui::GetStyle().FontSizeBase : std::clamp(Size, min_font_size_v, max_font_size_v); }
+        void ZoomBy(float Notches) noexcept { m_FontSize = std::clamp((m_FontSize > 0.0f ? m_FontSize : ImGui::GetStyle().FontSizeBase) + Notches, min_font_size_v, max_font_size_v); }
+
         // The compiler's complaints about this file: the Logs' problems from warning up whose site is the file.
         void UpdateMarkers(const xlog::hub& Hub) noexcept
         {
@@ -128,7 +139,16 @@ namespace xscript::module_editor
             }
             ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::ColorConvertU32ToFloat4(background_v));
             if (ImGui::BeginChild(("##codechild" + m_Key).c_str(), ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_AlwaysHorizontalScrollbar | ImGuiWindowFlags_NoMove))
+            {
+                if (m_FontSize <= 0.0f) m_FontSize = ImGui::GetStyle().FontSizeBase;
+                m_X = ImGui::GetWindowPos().x + ImGui::GetWindowSize().x * 0.5f;
+                m_Y = ImGui::GetWindowPos().y + ImGui::GetWindowSize().y * 0.5f;
+                const auto& IO = ImGui::GetIO();
+                if (IO.KeyCtrl && IO.MouseWheel != 0.0f && ImGui::IsWindowHovered()) ZoomBy(IO.MouseWheel);      // ImGui does not scroll while Ctrl is down
+                ImGui::PushFont(nullptr, m_FontSize);
                 m_Text.Render("##code", ImVec2(0, 0), false, [] {});
+                ImGui::PopFont();
+            }
             ImGui::EndChild();
             ImGui::PopStyleColor();
         }

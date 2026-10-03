@@ -71,7 +71,7 @@ Open a ScriptModule asset (double click in the asset browser). Windows, all dock
   Explorer*, *Copy Path*, *Source Control > Stage / Revert / Lock / Unlock*. A double click or Enter opens the file. The box filters; *Changes only* shows what source control or the module
   says is not in step.
 - **one window per open file** - read-only C++ with line numbers and highlighting; the lines the compiler complained about are marked (the problems of the Logs whose site is the file),
-  and the viewer shows the file again when Visual Studio saves it. **A file has one viewer, ever**: opening an open file brings its tab to the front. The code is written in Visual Studio.
+  and the viewer shows the file again when Visual Studio saves it. **A file has one viewer, ever**: opening an open file brings its tab to the front. **Ctrl + the mouse wheel** over the code zooms its text (one pixel for each notch, 6 to 64; each viewer keeps its own size). The code is written in Visual Studio.
   The Logs' *Open source* and F8 land here, at the line, for the files of an open module.
 - **Overview** - what the module is made of, what is wrong with it (missing and unlisted files, validation errors), whether it is part of the game, how the last build went, *Export CMake*.
 - **Libraries** - the libraries and defines (the descriptor's own properties), with *+ Add library* and *+ Add define*.
@@ -89,7 +89,8 @@ Run as `<module name>\Command` (see `list`); every edit is undoable, and the des
 | `ExcludeFile -Path p [-Value true\|false]` | keep a file in the module but out of the build |
 | `Rescan [-RemoveMissing true]` | add the files that are in the folder and not in the module; drop the ones that are gone |
 | `ListFiles` | path, kind, excluded, state (`ok` `missing` `unlisted`), source control, lock, open, bytes |
-| `OpenFile -Path p [-Line n]` / `CloseFile -Path p` / `ListOpenFiles` | the viewers (one per file) |
+| `OpenFile -Path p [-Line n]` / `CloseFile -Path p` / `ListOpenFiles` | the viewers (one per file); the list says the text size and where the code is on the screen |
+| `ZoomFile -Path p [-By notches] [-Size pixels]` | the text size of a viewer, as the wheel does (`-Size 0` = the default) |
 | `ListTree` / `SelectFile -Path p` | the rows the tree drew (with their screen positions), and select one |
 | `ExportCMake [-File path]` | `module.cmake`: include it in a project that builds the game without the editor and call `<module>_apply(<target>)`; paths in it are relative to the file |
 | `SetProperty`, `ListOp`, `ListProperties`, `Save`, `Undo`, `Redo` | the descriptor's own properties (libraries, defines): `SetProperty -Path "ScriptModule/Libraries[G:0]/Name" -Value "Box2D"` |
