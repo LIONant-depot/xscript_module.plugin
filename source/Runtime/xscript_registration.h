@@ -1,6 +1,5 @@
 #ifndef XSCRIPT_REGISTRATION_H
 #define XSCRIPT_REGISTRATION_H
-#pragma once
 
 // What a script module includes to announce its components and systems. Each announcement is an entry in an intrusive
 // linked list whose constructor runs at static-init time, so a module is registered just by being compiled into the game
@@ -84,20 +83,7 @@ namespace xscript
 //     #undef  XSCRIPT_IMPORT_ONLY
 // and then names each one it uses with XSCRIPT_USES_COMPONENT. The component stays registered once, by the binary that owns it; the
 // module only gets its own reflection (XPROPERTY_REG) and its own copy of the type's information.
-#ifdef XSCRIPT_IMPORT_ONLY
-    #define XSCRIPT_REGISTER_COMPONENT(TYPE, CATEGORY, PRIORITY) XPROPERTY_REG(TYPE)
-#else
-#define XSCRIPT_REGISTER_COMPONENT(TYPE, CATEGORY, PRIORITY) \
-    XPROPERTY_REG(TYPE) \
-    inline xscript::self_registration<xscript::component_entry> g_AutoReg_##TYPE \
-    { xscript::component_entry \
-        { [](xecs::game_mgr::instance& GameMgr, xecs::plugin::token Token) noexcept { GameMgr.RegisterComponents<TYPE>(Token); } \
-        , TYPE::typedef_v.m_pName, CATEGORY, PRIORITY \
-        , xecs::component::type::info_v<TYPE>.m_Guid.m_Value \
-        , __FILE__ \
-        } \
-    };
-#endif
+// (XSCRIPT_REGISTER_COMPONENT is defined at the end of this file, outside the include guard.)
 
 // A module that queries a component it does not define itself (anything of the engine: xlioncore::transform, ...) says so once, anywhere in
 // the module:   XSCRIPT_USES_COMPONENT(xlioncore::transform)
@@ -118,3 +104,22 @@ namespace xscript
     };
 
 #endif // XSCRIPT_REGISTRATION_H
+
+// XSCRIPT_REGISTER_COMPONENT is chosen here, OUTSIDE the include guard, so that it is chosen again every time this header is included: an engine header (which includes this one
+// itself) read between  #define XSCRIPT_IMPORT_ONLY  and  #undef XSCRIPT_IMPORT_ONLY  gets the import-only one, even when the module included this header before. A module
+// that uses the macro for its own components after such a block includes this header once more, so it gets the registering one back.
+#undef XSCRIPT_REGISTER_COMPONENT
+#ifdef XSCRIPT_IMPORT_ONLY
+    #define XSCRIPT_REGISTER_COMPONENT(TYPE, CATEGORY, PRIORITY) XPROPERTY_REG(TYPE)
+#else
+#define XSCRIPT_REGISTER_COMPONENT(TYPE, CATEGORY, PRIORITY) \
+    XPROPERTY_REG(TYPE) \
+    inline xscript::self_registration<xscript::component_entry> g_AutoReg_##TYPE \
+    { xscript::component_entry \
+        { [](xecs::game_mgr::instance& GameMgr, xecs::plugin::token Token) noexcept { GameMgr.RegisterComponents<TYPE>(Token); } \
+        , TYPE::typedef_v.m_pName, CATEGORY, PRIORITY \
+        , xecs::component::type::info_v<TYPE>.m_Guid.m_Value \
+        , __FILE__ \
+        } \
+    };
+#endif
