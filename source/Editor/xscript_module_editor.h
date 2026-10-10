@@ -111,7 +111,11 @@ namespace xscript::module_editor
             , m_AddFile(m_Undo, *this), m_RemoveFile(m_Undo, *this), m_RenameFile(m_Undo, *this), m_NewFolder(m_Undo, *this), m_RenameFolder(m_Undo, *this), m_RemoveFolder(m_Undo, *this)
             , m_ExcludeFile(m_Undo, *this), m_Rescan(m_Undo, *this), m_ListFiles(m_Undo, *this), m_OpenFile(m_Undo, *this), m_CloseFile(m_Undo, *this), m_ZoomFile(m_Undo, *this), m_ListOpen(m_Undo, *this), m_ListTree(m_Undo, *this), m_SelectNode(m_Undo, *this), m_ExportCMake(m_Undo, *this)
         {
-            m_Folder = std::filesystem::path(m_Document.m_DescriptorPath).parent_path();
+            std::wstring DescriptorPath = m_Document.m_DescriptorPath;
+#ifndef _WIN32
+            std::replace(DescriptorPath.begin(), DescriptorPath.end(), L'\\', L'/');            // the pipeline builds this path with '\': std::filesystem on Linux would not find the folder in it
+#endif
+            m_Folder = std::filesystem::path(DescriptorPath).parent_path();
             if (!m_Folder.empty() && !std::filesystem::exists(DescriptorFile(m_Folder)))          // a module from before the descriptors: written from its folder (the generator does the same)
             {
                 LoadOrMigrate(m_Folder, /*bWriteMigration*/ true);
